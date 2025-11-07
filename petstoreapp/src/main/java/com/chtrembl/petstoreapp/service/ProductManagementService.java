@@ -123,7 +123,7 @@ public class ProductManagementService {
         } finally {
             MDC.remove(OPERATION);
             MDC.remove(CATEGORY);
-            throw new Exception("Cannont move futher");
+        //     throw new Exception("Cannont move futher");
         }
     }
 }
