@@ -30,7 +30,7 @@ public class ProductManagementService {
     private final ContainerEnvironment containerEnvironment;
     private final ProductServiceClient productServiceClient;
 
-    public Collection<Product> getProductsByCategory(String category, List<Tag> tags) {
+    public Collection<Product> getProductsByCategory(String category, List<Tag> tags) throws Exception {
         List<Product> products;
 
         MDC.put(OPERATION, "getProducts");
@@ -38,6 +38,24 @@ public class ProductManagementService {
 
         String requestId = MDC.get(REQUEST_ID);
         String traceId = MDC.get(TRACE_ID);
+
+        // Track request initiator information
+        log.info("Product request initiated [User: {}, SessionID: {}, RequestID: {}, TraceID: {}, Category: {}]",
+                this.sessionUser.getName(), this.sessionUser.getSessionId(), requestId, traceId, category);
+
+        // Custom telemetry event for request tracking
+        this.sessionUser.getTelemetryClient().trackEvent(
+                "ProductRequest_UserTracking",
+                java.util.Map.of(
+                        "username", this.sessionUser.getName(),
+                        "sessionId", this.sessionUser.getSessionId() != null ? this.sessionUser.getSessionId() : "N/A",
+                        "category", category,
+                        "requestId", requestId != null ? requestId : "N/A",
+                        "traceId", traceId != null ? traceId : "N/A",
+                        "operation", "getProducts"
+                ),
+                null
+        );
 
         log.info("Starting product retrieval operation [RequestID: {}, TraceID: {}, Category: {}]",
                 requestId, traceId, category);
@@ -63,9 +81,30 @@ public class ProductManagementService {
                         .toList();
             }
 
+            int productCount = products.size();
+            
             log.info("Successfully retrieved {} products for category {} with tags {} [RequestID: {}, TraceID: {}]",
-                    products.size(), category, tags, requestId, traceId);
+                    productCount, category, tags, requestId, traceId);
+            
+            log.info("Returning {} product(s) to user {} [SessionID: {}, Category: {}, Tags: {}]",
+                    productCount, this.sessionUser.getName(), this.sessionUser.getSessionId(), category, tags);
 
+            // Track custom metric for products returned
+            this.sessionUser.getTelemetryClient().trackMetric(
+                    "ProductsReturned",
+                    (double) productCount,
+                    1,
+                    (double) productCount,
+                    (double) productCount,
+                    java.util.Map.of(
+                            "username", this.sessionUser.getName(),
+                            "sessionId", this.sessionUser.getSessionId() != null ? this.sessionUser.getSessionId() : "N/A",
+                            "category", category,
+                            "tags", tags.toString(),
+                            "requestId", requestId != null ? requestId : "N/A"
+                    )
+            );
+            
             return products;
         } catch (FeignException fe) {
             log.error("Feign error retrieving products [RequestID: {}, TraceID: {}, Category: {}, HTTP: {}, Message: {}]",
@@ -84,6 +123,7 @@ public class ProductManagementService {
         } finally {
             MDC.remove(OPERATION);
             MDC.remove(CATEGORY);
+            throw new Exception("Cannont move futher");
         }
     }
 }
