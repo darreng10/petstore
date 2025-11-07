@@ -1,0 +1,16 @@
+target/
+.mvn/
+*.iml
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+local.settings.json
+*.log
+obj/
+bin/
+
+
+
+
