@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: petstore-postgres-product
+    environment:
+      POSTGRES_DB: petstore
+      POSTGRES_USER: petstore
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - petstore-product-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U petstore"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  productservice:
+    build: .
+    container_name: petstore-productservice
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AZURE_POSTGRESQL_URL: jdbc:postgresql://postgres:5432/petstore
+      AZURE_POSTGRESQL_USER: petstore
+      AZURE_POSTGRESQL_PASSWORD: password
+      PETSTOREPRODUCTSERVICE_SERVER_PORT: 8080
+    ports:
+      - "8081:8080"
+    restart: on-failure
+
+volumes:
+  petstore-product-data:
+    driver: local
+

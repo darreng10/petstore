@@ -3,6 +3,7 @@ package com.chtrembl.petstore.pet.model;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
+import jakarta.persistence.*;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -17,23 +18,39 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Entity
+@Table(name = "pets")
 public class Pet {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Valid
+    @ManyToOne(cascade = CascadeType.ALL)
+    @JoinColumn(name = "category_id")
     private Category category;
 
     @NotNull
+    @Column(nullable = false)
     private String name;
 
     @JsonProperty("photoURL")
     @NotNull
+    @Column(name = "photo_url", nullable = false)
     private String photoURL;
 
     @Valid
+    @ManyToMany(cascade = CascadeType.ALL)
+    @JoinTable(
+        name = "pet_tags",
+        joinColumns = @JoinColumn(name = "pet_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
     @Builder.Default
     private List<Tag> tags = new ArrayList<>();
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 20)
     private Status status;
 
     public Pet name(String name) {
