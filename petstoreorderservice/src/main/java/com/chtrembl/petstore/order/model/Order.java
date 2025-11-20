@@ -1,6 +1,7 @@
 package com.chtrembl.petstore.order.model;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonValue;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -33,6 +34,7 @@ public class Order {
 			description = "Order identifier (typically session ID)",
 			example = "68FAE9B1D86B794F0AE0ADD35A437428"
 	)
+	@JsonProperty("id")
 	private String id;
 
 	@Size(max = 255, message = "Email must not exceed 255 characters")

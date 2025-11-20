@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # Azure Cosmos DB Emulator
+  cosmosdb:
+    image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator:latest
+    container_name: petstore-cosmosdb
+    ports:
+      - "8081:8081"
+      - "10251:10251"
+      - "10252:10252"
+      - "10253:10253"
+      - "10254:10254"
+    environment:
+      AZURE_COSMOS_EMULATOR_PARTITION_COUNT: 3
+      AZURE_COSMOS_EMULATOR_ENABLE_DATA_PERSISTENCE: "true"
+      AZURE_COSMOS_EMULATOR_IP_ADDRESS_OVERRIDE: "127.0.0.1"
+    volumes:
+      - cosmosdb-data:/data/db
+    healthcheck:
+      test: ["CMD", "curl", "-k", "https://localhost:8081/_explorer/emulator.pem"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  orderservice:
+    build: .
+    container_name: petstore-orderservice
+    depends_on:
+      cosmosdb:
+        condition: service_healthy
+    environment:
+      AZURE_COSMOS_ENABLED: "true"
+      AZURE_COSMOS_URI: "https://cosmosdb:8081"
+      AZURE_COSMOS_KEY: "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+      AZURE_COSMOS_DATABASE: "petstore"
+      AZURE_COSMOS_CONTAINER: "orders"
+      PETSTOREORDERSERVICE_SERVER_PORT: 8080
+      PETSTOREPRODUCTSERVICE_URL: "http://host.docker.internal:8082"
+    ports:
+      - "8083:8080"
+    restart: on-failure
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  cosmosdb-data:
+    driver: local
+

@@ -23,6 +23,7 @@
         <lombok.version>1.18.36</lombok.version>
         <maven.build.timestamp.format>yyyy-MM-dd'T'HH:mm:ss</maven.build.timestamp.format>
         <httpclient.version>4.5.14</httpclient.version>
+        <azure-cosmos.version>4.53.1</azure-cosmos.version>
     </properties>
 
     <dependencies>
@@ -38,9 +39,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Azure Cosmos DB -->
         <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-cache</artifactId>
+            <groupId>com.azure</groupId>
+            <artifactId>azure-cosmos</artifactId>
+            <version>${azure-cosmos.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
