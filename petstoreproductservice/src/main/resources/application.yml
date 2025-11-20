@@ -2,22 +2,21 @@ spring:
   application:
     name: petstoreproductservice
   datasource:
-    url: ${AZURE_POSTGRESQL_URL:jdbc:postgresql://localhost:5432/petstore}
+    url: ${AZURE_POSTGRESQL_URL:jdbc:postgresql://petstore.postgres.database.azure.com:5432/productstoreDB?user=petstore&password=AzureDBpw123!&sslmode=require}
     username: ${AZURE_POSTGRESQL_USER:petstore}
-    password: ${AZURE_POSTGRESQL_PASSWORD:password}
+    password: ${AZURE_POSTGRESQL_PASSWORD:AzureDBpw123!}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: false
+    show-sql: true
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
   sql:
     init:
-      mode: always
-      continue-on-error: false
+      mode: never
 server:
   port: ${PETSTOREPRODUCTSERVICE_SERVER_PORT:8080}
 

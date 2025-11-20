@@ -19,7 +19,7 @@ import java.util.List;
 @AllArgsConstructor
 @Builder
 @Entity
-@Table(name = "products")
+@Table(name = "product")
 public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,21 +36,21 @@ public class Product {
 
     @JsonProperty("photoURL")
     @NotNull
-    @Column(name = "photo_url", nullable = false)
+    @Column(name = "photourl", nullable = false)
     private String photoURL;
 
     @Valid
     @ManyToMany(cascade = CascadeType.ALL)
     @JoinTable(
-        name = "product_tags",
+        name = "product_tag",
         joinColumns = @JoinColumn(name = "product_id"),
         inverseJoinColumns = @JoinColumn(name = "tag_id")
     )
     @Builder.Default
     private List<Tag> tags = new ArrayList<>();
 
-    @Enumerated(EnumType.STRING)
     @Column(length = 20)
+    @Convert(converter = StatusConverter.class)
     private Status status;
 
     public Product name(String name) {
