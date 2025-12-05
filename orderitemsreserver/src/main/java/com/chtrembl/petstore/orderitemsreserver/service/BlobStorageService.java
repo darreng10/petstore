@@ -1,5 +1,7 @@
 package com.chtrembl.petstore.orderitemsreserver.service;
 
+import com.azure.core.http.policy.ExponentialBackoffOptions;
+import com.azure.core.http.policy.RetryOptions;
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -12,6 +14,7 @@ import com.chtrembl.petstore.orderitemsreserver.model.OrderReservationRequest;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.time.Duration;
 import java.util.logging.Logger;
 
 /**
@@ -27,14 +30,25 @@ public class BlobStorageService {
     private final ObjectMapper objectMapper;
     
     /**
-     * Constructor that initializes the blob service client.
+     * Constructor that initializes the blob service client with retry policy.
      * 
      * @param connectionString Azure Storage connection string
      */
     public BlobStorageService(String connectionString) {
+        // Configure retry policy with exponential backoff
+        ExponentialBackoffOptions backoffOptions = new ExponentialBackoffOptions()
+                .setMaxRetries(5)                           // Max retry attempts
+                .setBaseDelay(Duration.ofSeconds(2))        // Initial delay: 2 seconds
+                .setMaxDelay(Duration.ofSeconds(30));       // Max delay: 30 seconds
+        
+        RetryOptions retryOptions = new RetryOptions(backoffOptions);
+        
         this.blobServiceClient = new BlobServiceClientBuilder()
                 .connectionString(connectionString)
+                .retryOptions(retryOptions)
                 .buildClient();
+        
+        logger.info("BlobStorageService initialized with retry policy: max 5 retries, 2-30s backoff");
         
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());

@@ -8,6 +8,7 @@ import com.microsoft.azure.functions.HttpStatus;
 import com.microsoft.azure.functions.annotation.AuthorizationLevel;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.HttpTrigger;
+import com.microsoft.azure.functions.annotation.ServiceBusQueueTrigger;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -20,9 +21,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.Optional;
 
 /**
- * Azure Function with HTTP Trigger for Order Items Reservation.
+ * Azure Function with Service Bus Trigger for Order Items Reservation.
  * 
- * This function receives order reservation requests from the petstore application
+ * This function receives order reservation requests from the petstore application via Azure Service Bus
  * and stores them as JSON files in Azure Blob Storage using the session ID as the file name.
  * Files are overwritten for each session update.
  */
@@ -37,56 +38,47 @@ public class OrderItemsReserverFunction {
     }
 
     /**
-     * HTTP trigger function to reserve order items.
+     * Service Bus Queue trigger function to reserve order items.
      * 
-     * This function is triggered by HTTP POST requests and processes order reservation requests.
-     * It validates the request, stores it to blob storage, and returns a response.
+     * This function is triggered by messages sent to the Azure Service Bus Queue and processes 
+     * order reservation requests. It validates the request, stores it to blob storage.
      * 
-     * @param request The HTTP request containing the order reservation data
+     * @param message The message from Service Bus queue containing order reservation data (JSON string)
      * @param context The execution context
-     * @return HTTP response with reservation status
      */
     @FunctionName("ReserveOrderItems")
-    public HttpResponseMessage run(
-            @HttpTrigger(
-                name = "req",
-                methods = {HttpMethod.POST},
-                authLevel = AuthorizationLevel.ANONYMOUS,
-                route = "reserve")
-            HttpRequestMessage<Optional<String>> request,
+    public void run(
+            @ServiceBusQueueTrigger(
+                name = "message",
+                queueName = "%ServiceBusQueueName%",
+                connection = "ServiceBusConnection")
+            String message,
             final ExecutionContext context) {
 
-        context.getLogger().info("OrderItemsReserver function triggered");
+        context.getLogger().info("OrderItemsReserver Service Bus function triggered");
+        context.getLogger().info("Message received: " + message);
 
         try {
-            // Get request body
-            Optional<String> requestBody = request.getBody();
-            
-            if (!requestBody.isPresent() || requestBody.get().isEmpty()) {
-                context.getLogger().warning("Empty request body received");
-                return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
-                        .body(createErrorResponse("Request body is empty"))
-                        .build();
+            // Validate message
+            if (message == null || message.isEmpty()) {
+                context.getLogger().severe("Empty message received from Service Bus");
+                throw new IllegalArgumentException("Message body is empty");
             }
 
-            // Parse request body to OrderReservationRequest
+            // Parse message to OrderReservationRequest
             OrderReservationRequest reservationRequest = objectMapper.readValue(
-                    requestBody.get(), 
+                    message, 
                     OrderReservationRequest.class);
 
             // Validate request
             if (reservationRequest.getSessionId() == null || reservationRequest.getSessionId().isEmpty()) {
-                context.getLogger().warning("Session ID is missing in request");
-                return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
-                        .body(createErrorResponse("Session ID is required"))
-                        .build();
+                context.getLogger().severe("Session ID is missing in request");
+                throw new IllegalArgumentException("Session ID is required");
             }
 
             if (reservationRequest.getProducts() == null || reservationRequest.getProducts().isEmpty()) {
-                context.getLogger().warning("Products list is empty in request");
-                return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
-                        .body(createErrorResponse("Products list cannot be empty"))
-                        .build();
+                context.getLogger().severe("Products list is empty in request");
+                throw new IllegalArgumentException("Products list is required");
             }
 
             // Set timestamp if not provided
@@ -106,43 +98,25 @@ public class OrderItemsReserverFunction {
             
             if (connectionString == null || connectionString.isEmpty()) {
                 context.getLogger().severe("Azure Storage connection string not configured");
-                return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(createErrorResponse("Storage connection not configured"))
-                        .build();
+                throw new RuntimeException("Storage connection not configured");
             }
 
             // Initialize blob storage service and upload
             BlobStorageService blobService = new BlobStorageService(connectionString);
             String blobFileName = blobService.uploadOrderReservation(reservationRequest);
 
-            // Create success response
-            ReservationResponse response = new ReservationResponse(
-                    true,
-                    "Order reservation stored successfully",
-                    reservationRequest.getSessionId(),
-                    blobFileName,
-                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-            );
-
             context.getLogger().info("Order reservation successfully stored to blob: " + blobFileName);
-
-            return request.createResponseBuilder(HttpStatus.OK)
-                    .header("Content-Type", "application/json")
-                    .body(response)
-                    .build();
 
         } catch (Exception e) {
             context.getLogger().severe("Error processing order reservation: " + e.getMessage());
             e.printStackTrace();
-            
-            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(createErrorResponse("Failed to process order reservation: " + e.getMessage()))
-                    .build();
+            throw new RuntimeException("Failed to process order reservation", e);
         }
     }
 
     /**
      * Health check endpoint to verify the function is running.
+     * This HTTP endpoint is kept for monitoring purposes.
      */
     @FunctionName("HealthCheck")
     public HttpResponseMessage healthCheck(
@@ -157,21 +131,8 @@ public class OrderItemsReserverFunction {
         context.getLogger().info("Health check endpoint called");
         
         return request.createResponseBuilder(HttpStatus.OK)
-                .body("{\"status\":\"healthy\",\"service\":\"OrderItemsReserver\"}")
+                .body("{\"status\":\"healthy\",\"service\":\"OrderItemsReserver\",\"trigger\":\"ServiceBus\"}")
                 .build();
-    }
-
-    /**
-     * Creates an error response object.
-     */
-    private ReservationResponse createErrorResponse(String message) {
-        return new ReservationResponse(
-                false,
-                message,
-                null,
-                null,
-                LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-        );
     }
 }
 

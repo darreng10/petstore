@@ -1,12 +1,10 @@
 package com.chtrembl.petstoreapp.service;
 
 import com.chtrembl.petstoreapp.client.OrderServiceClient;
-import com.chtrembl.petstoreapp.client.OrderItemsReserverClient;
 import com.chtrembl.petstoreapp.exception.OrderServiceException;
 import com.chtrembl.petstoreapp.model.Order;
 import com.chtrembl.petstoreapp.model.OrderReservationRequest;
 import com.chtrembl.petstoreapp.model.Product;
-import com.chtrembl.petstoreapp.model.ReservationResponse;
 import com.chtrembl.petstoreapp.model.User;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -37,7 +35,7 @@ public class OrderManagementService {
     private final OrderServiceClient orderServiceClient;
     
     @Autowired(required = false)
-    private OrderItemsReserverClient orderItemsReserverClient;
+    private ServiceBusSenderService serviceBusSenderService;
 
     public void updateOrder(long productId, int quantity, boolean completeOrder) {
         MDC.put(OPERATION, "updateOrder");
@@ -143,16 +141,17 @@ public class OrderManagementService {
     }
 
     /**
-     * Reserves order items by calling the OrderItemsReserver Azure Function.
-     * The function stores the order data in blob storage using session ID as file name.
+     * Reserves order items by sending a message to Azure Service Bus Queue.
+     * The OrderItemsReserver Azure Function (with Service Bus trigger) will process the message
+     * and store the order data in blob storage using session ID as file name.
      * This method is called after each cart update to keep the reservation up-to-date.
      * 
      * @param order The order to reserve
      */
     private void reserveOrderItems(Order order) {
-        // Skip if orderItemsReserverClient is not configured
-        if (orderItemsReserverClient == null) {
-            log.debug("OrderItemsReserverClient not configured, skipping order reservation");
+        // Skip if serviceBusSenderService is not configured
+        if (serviceBusSenderService == null || !serviceBusSenderService.isConfigured()) {
+            log.debug("ServiceBusSenderService not configured, skipping order reservation");
             return;
         }
 
@@ -163,7 +162,7 @@ public class OrderManagementService {
         }
 
         try {
-            log.info("Reserving order items for session: {} with {} products", 
+            log.info("Sending order reservation message to Service Bus for session: {} with {} products", 
                     sessionUser.getSessionId(), order.getProducts().size());
 
             // Build reservation request
@@ -176,31 +175,22 @@ public class OrderManagementService {
             reservationRequest.setTotalItems(order.getProducts().size());
             reservationRequest.setStatus(order.isComplete() ? "completed" : "active");
 
-            // Call OrderItemsReserver
-            ReservationResponse response = orderItemsReserverClient.reserveOrderItems(reservationRequest);
+            // Send message to Service Bus
+            serviceBusSenderService.sendMessage(reservationRequest);
 
-            if (response.isSuccess()) {
-                log.info("Successfully reserved order items. Blob file: {}", response.getBlobFileName());
-                
-                // Track telemetry
-                this.sessionUser.getTelemetryClient()
-                        .trackEvent(String.format(
-                                "PetStoreApp user %s reserved order items to blob storage",
-                                this.sessionUser.getName()), 
-                                this.sessionUser.getCustomEventProperties(), 
-                                null);
-            } else {
-                log.warn("Order reservation returned unsuccessful response: {}", response.getMessage());
-            }
+            log.info("Successfully sent order reservation message to Service Bus");
+            
+            // Track telemetry
+            this.sessionUser.getTelemetryClient()
+                    .trackEvent(String.format(
+                            "PetStoreApp user %s sent order reservation to Service Bus",
+                            this.sessionUser.getName()), 
+                            this.sessionUser.getCustomEventProperties(), 
+                            null);
 
-        } catch (FeignException fe) {
-            // Log but don't throw - order reservation failure shouldn't break the cart update
-            log.error("Failed to reserve order items via Feign client: HTTP {} - {}", 
-                    fe.status(), fe.getMessage(), fe);
-            this.sessionUser.getTelemetryClient().trackException(fe);
         } catch (Exception e) {
             // Log but don't throw - order reservation failure shouldn't break the cart update
-            log.error("Unexpected error reserving order items", e);
+            log.error("Failed to send order reservation message to Service Bus: {}", e.getMessage(), e);
             this.sessionUser.getTelemetryClient().trackException(e);
         }
     }
