@@ -46,6 +46,13 @@ public class OrderRepository {
             );
             
             Order savedOrder = response.getItem();
+            
+            // Handle case where response.getItem() returns null
+            if (savedOrder == null) {
+                log.warn("Cosmos DB upsert response returned null item, returning original order");
+                return order;
+            }
+            
             log.info("Successfully saved order {} to Cosmos DB. Request charge: {} RUs",
                     savedOrder.getId(), response.getRequestCharge());
             
